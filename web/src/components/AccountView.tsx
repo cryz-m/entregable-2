@@ -1,6 +1,7 @@
 import {
   ArrowLeft,
   ArrowRight,
+  Copy,
   ExternalLink,
   Gavel,
   Loader2,
@@ -45,6 +46,7 @@ interface AccountViewProps {
   }) => Promise<{ ok: boolean; error?: string; contractId?: string }>;
   onConnect: () => void;
   onSwitchAccount: () => void;
+  onCopyAccount: () => void;
   onHelp: () => void;
   onBack: () => void;
 }
@@ -207,6 +209,7 @@ export function AccountView({
   onCreate,
   onConnect,
   onSwitchAccount,
+  onCopyAccount,
   onHelp,
   onBack,
 }: AccountViewProps) {
@@ -302,6 +305,10 @@ export function AccountView({
           <span>Cuenta conectada</span>
           <strong>•••• {wallet.slice(-4)}</strong>
           <small>Los acuerdos se guardan en este navegador.</small>
+          <button type="button" className="help-cta" onClick={onCopyAccount}>
+            <Copy size={12} />
+            Copiar mi identificador
+          </button>
           <button type="button" className="help-cta" onClick={onSwitchAccount}>
             Cambiar de cuenta
           </button>

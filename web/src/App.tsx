@@ -835,6 +835,7 @@ export default function App() {
           onCreate={createAgreement}
           onConnect={connectWallet}
           onSwitchAccount={disconnectWallet}
+          onCopyAccount={() => wallet && copyValue(wallet, "Tu identificador")}
           onHelp={() => setHelpOpen(true)}
           onBack={goHome}
         />

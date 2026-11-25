@@ -190,7 +190,9 @@ export function CreateAgreementModal({
                   required
                 />
                 <small>
-                  Pedile que copie su identificador desde Varial. Empieza con G.
+                  Pedile que copie su identificador desde Varial o desde{" "}
+                  <strong>Mi cuenta → Copiar mi identificador</strong>. Empieza
+                  con G.
                 </small>
               </label>
 
