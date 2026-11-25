@@ -8,9 +8,6 @@ cuando se cumplen 15 días sin disputa, o con la decisión de un árbitro neutra
 si hay una disputa. Ninguna de las dos partes puede quedarse con el depósito por
 su cuenta.
 
-Práctica individual de smart contracts. Es un problema distinto al de la
-hackathon.
-
 ---
 
 ## 1. El problema
@@ -55,13 +52,6 @@ pero no impone el plazo de 15 días ni deja un estado público con las reglas. A
 la devolución automática es parte del contrato, no de la buena voluntad de los
 participantes. El camino de adopción natural es una inmobiliaria, una
 cooperativa o una municipalidad que ofrezca el escrow como servicio.
-
-## 2.1 Alcance
-
-Esto es una práctica individual y no la idea de la hackathon. El contrato hace
-**solo** una cosa: custodiar el depósito de un alquiler y repartirlo según las
-reglas de arriba. No cobra alquileres, no verifica identidades y no reemplaza
-un contrato de arrendamiento.
 
 ## 3. Qué hace el contrato
 
@@ -194,12 +184,6 @@ Los 19 tests cubren el camino feliz, los errores y los permisos:
 | `resolve_exige_la_firma_del_arbitro` | Sin la firma del árbitro, `resolve` falla. |
 | `renueva_el_ttl` | La entrada persistente queda con ~30 días de vida. |
 
-Salida esperada:
-
-```text
-running 19 tests
-test result: ok. 19 passed; 0 failed
-```
 
 ## 6. Compilar y desplegar en testnet
 
@@ -340,36 +324,7 @@ El panel se puede abrir directo con `?view=cuenta`.
 
 Más detalles en [`web/README.md`](web/README.md).
 
-## 8. Demo ya ejecutada en testnet
-
-Esta versión quedó desplegada y probada el **25 de noviembre de 2026** con XLM
-nativo. No es una maqueta: las transacciones están en el explorador. El contrato
-que usa la app por defecto es otro, vigente y con 100 XLM:
-`CBOEEBM4MJQ425TV2JZNPCFH7S4YT7SEH3BUTBBEXFYA3HCGSBH4K6BP`.
-
-| Dato | Valor |
-|---|---|
-| Contrato | [`CDVZ6Z3Q23U7ZL532Z2PQCFSYFBX6INUBEZ4RZVSTZSE2NSN4TY4PBU7`](https://stellar.expert/explorer/testnet/contract/CDVZ6Z3Q23U7ZL532Z2PQCFSYFBX6INUBEZ4RZVSTZSE2NSN4TY4PBU7) |
-| Wasm hash | `dcda2e977fa3cf89b0b2e23a35e61b1e5dce3807709f4ea440dc7befae4cb81a` |
-| Token | XLM nativo (`CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC`) |
-| Depósito | 100 XLM (`1000000000` stroops) |
-| Deploy | [`b8eca9cc…07e5344`](https://stellar.expert/explorer/testnet/tx/b8eca9cc7b06765a62d30909cff40ff65a1cc49181893cd11a7486c7607e5344) |
-| Fondeo | [`a06b8091…6cb632`](https://stellar.expert/explorer/testnet/tx/a06b80919b2dfe8d97b6ce71469801c0e3711df937ceae2b53a0c3839e6cb632) |
-| Disputa | [`91759dce…05ccba`](https://stellar.expert/explorer/testnet/tx/91759dcec4fd7d60205a15746cb6b13f938ccefa200f67301d14d2c84205ccba) |
-| Resolución | [`074bdfca…070661`](https://stellar.expert/explorer/testnet/tx/074bdfca266376e28fa1dba2f9488864062818fa31e8194be1383ec498070661) |
-
-Flujo ejecutado:
-
-1. Se desplegó con `lease_end = 1795618926` (25 nov 2026, 15:02 UTC).
-2. El inquilino fondeó 100 XLM.
-3. Al terminar el contrato, el arrendador abrió una disputa con el hash
-   `7099855f…a79ea2`.
-4. `claim` del inquilino falló con `Error(Contract, #5)` (`InvalidState`),
-   porque la disputa estaba abierta.
-5. El árbitro resolvió: 30 XLM al inquilino y 70 XLM al arrendador.
-6. El estado final quedó en `Closed`.
-
-## 9. Limitaciones y siguientes pasos
+## 8. Limitaciones y siguientes pasos
 
 - **El árbitro es un punto de confianza.** Si desaparece, una disputa puede
   quedar bloqueada. Una versión de producción podría agregar un plazo máximo
@@ -388,14 +343,3 @@ Flujo ejecutado:
 - **Producción.** Antes de usar dinero real: auditoría, pruebas de integración
   con la wallet, token estable, y un árbitro con reputación verificable.
 
-## 10. Fuentes
-
-- CR Hoy, *Frente Amplio propone plan para garantizar devolución del depósito de
-  alquiler en este plazo*, 12 de noviembre de 2025:
-  <https://crhoy.com/nacionales/frente-amplio-propone-plan-para-garantizar-devolucion-del-deposito-de-alquiler-en-este-plazo>
-  (expediente 25.288; 340 000 hogares en alquiler según ENAHO 2024).
-- Ley General de Arrendamientos Urbanos y Suburbanos, Ley 7527, artículo 59.
-- OpenZeppelin Stellar Contracts, módulo `ownable`:
-  <https://github.com/OpenZeppelin/stellar-contracts>
-- Documentación de Soroban SDK:
-  <https://docs.rs/soroban-sdk/latest/soroban_sdk/>
