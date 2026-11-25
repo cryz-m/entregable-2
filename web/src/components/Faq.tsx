@@ -15,6 +15,21 @@ export function Faq() {
       <div className="faq__list">
         <details>
           <summary>
+            <span>¿Cómo creo un acuerdo para otra persona?</span>
+            <Plus size={17} />
+          </summary>
+          <div className="faq__answer">
+            <p>
+              En <strong>Mis acuerdos → Crear acuerdo</strong> ingresás la
+              cuenta Varial del inquilino, el depósito y la fecha de fin. La app
+              crea el acuerdo y te da un enlace de invitación. La otra persona
+              lo abre, ingresa y el acuerdo se guarda solo en su cuenta.
+            </p>
+          </div>
+        </details>
+
+        <details>
+          <summary>
             <span>¿Necesito una cuenta especial?</span>
             <Plus size={17} />
           </summary>

@@ -1,12 +1,16 @@
 import {
+  Address,
   BASE_FEE,
   Contract,
   Networks,
+  Operation,
+  StrKey,
   Transaction,
   TransactionBuilder,
   nativeToScVal,
   rpc,
   scValToNative,
+  xdr,
 } from "@stellar/stellar-sdk";
 import { signTransaction as varialSign } from "@stellar/varial-sdk";
 
@@ -19,6 +23,11 @@ export const DEFAULT_CONTRACT_ID =
 export const READ_SOURCE =
   env.VITE_READ_SOURCE || "GD6HOW6YNU4LVCQI7YBJHHVSSAY6XZENODBWSVOXVYC4HLLT6ZZFSV26";
 export const NATIVE_TOKEN_ID = "CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC";
+export const TOKEN_ID = env.VITE_TOKEN_ID || NATIVE_TOKEN_ID;
+export const MEDIATOR_ADDRESS =
+  env.VITE_MEDIATOR_ADDRESS ||
+  "GD37NNKAUCJEIHHLQREFVHJ2NWQOWQZJBK44FR7JQB7G4MALO42RHFW4";
+export const WASM_URL = "/deposito_seguro.wasm";
 
 export const server = new rpc.Server(RPC_URL);
 
@@ -124,23 +133,17 @@ export interface InvokeResult {
   hash: string;
 }
 
-export async function invokeContract(
-  contractId: string,
-  method: string,
-  args: ScVal[],
-  address: string,
-): Promise<InvokeResult> {
-  const account = await server.getAccount(address);
-  const contract = new Contract(contractId);
-  const tx = new TransactionBuilder(account, {
-    fee: BASE_FEE,
-    networkPassphrase: NETWORK_PASSPHRASE,
-  })
-    .addOperation(contract.call(method, ...args))
-    .setTimeout(60)
-    .build();
+type StellarOperation = ReturnType<typeof Operation.createCustomContract>;
 
-  const prepared = await server.prepareTransaction(tx);
+interface SubmitResult {
+  hash: string;
+  returnValue: unknown;
+}
+
+async function signAndSubmit(
+  prepared: Transaction,
+  address: string,
+): Promise<SubmitResult> {
   const signed = await varialSign(prepared.toXDR(), {
     networkPassphrase: NETWORK_PASSPHRASE,
     address,
@@ -174,7 +177,136 @@ export async function invokeContract(
     throw new Error("La operación no se completó.");
   }
 
-  return { hash: send.hash };
+  return {
+    hash: send.hash,
+    returnValue: "returnValue" in result ? result.returnValue : undefined,
+  };
+}
+
+async function submitOperation(
+  operation: StellarOperation,
+  address: string,
+): Promise<SubmitResult> {
+  const account = await server.getAccount(address);
+  const tx = new TransactionBuilder(account, {
+    fee: BASE_FEE,
+    networkPassphrase: NETWORK_PASSPHRASE,
+  })
+    .addOperation(operation)
+    .setTimeout(120)
+    .build();
+
+  const prepared = await server.prepareTransaction(tx);
+  return signAndSubmit(prepared, address);
+}
+
+export async function invokeContract(
+  contractId: string,
+  method: string,
+  args: ScVal[],
+  address: string,
+): Promise<InvokeResult> {
+  const contract = new Contract(contractId);
+  const result = await submitOperation(
+    contract.call(method, ...args) as StellarOperation,
+    address,
+  );
+  return { hash: result.hash };
+}
+
+export interface CreateAgreementInput {
+  landlord: string;
+  tenant: string;
+  amount: bigint;
+  leaseEnd: bigint;
+}
+
+export async function deployAgreement(
+  input: CreateAgreementInput,
+): Promise<string> {
+  if (!StrKey.isValidEd25519PublicKey(input.tenant)) {
+    throw new Error("La cuenta del inquilino no es válida.");
+  }
+  if (input.tenant.toUpperCase() === input.landlord.toUpperCase()) {
+    throw new Error("El inquilino no puede ser la misma cuenta que el arrendador.");
+  }
+  if (input.amount <= 0n) {
+    throw new Error("El monto del depósito debe ser mayor que cero.");
+  }
+  if (input.leaseEnd <= BigInt(Math.floor(Date.now() / 1000))) {
+    throw new Error("La fecha de fin del alquiler tiene que ser futura.");
+  }
+
+  const wasmResponse = await fetch(WASM_URL);
+  if (!wasmResponse.ok) {
+    throw new Error("No se pudo cargar el modelo del acuerdo.");
+  }
+  const wasm = new Uint8Array(await wasmResponse.arrayBuffer());
+  const wasmHash = new Uint8Array(
+    await crypto.subtle.digest("SHA-256", wasm),
+  );
+
+  let installed = true;
+  try {
+    await server.getContractWasmByHash(wasmHash);
+  } catch {
+    installed = false;
+  }
+
+  if (!installed) {
+    await submitOperation(
+      Operation.uploadContractWasm({ wasm }) as StellarOperation,
+      input.landlord,
+    );
+  }
+
+  const salt = crypto.getRandomValues(new Uint8Array(32));
+  const constructorArgs = [
+    new Address(input.tenant).toScVal(),
+    new Address(input.landlord).toScVal(),
+    new Address(MEDIATOR_ADDRESS).toScVal(),
+    new Address(TOKEN_ID).toScVal(),
+    nativeToScVal(input.amount, { type: "i128" }),
+    nativeToScVal(input.leaseEnd, { type: "u64" }),
+  ];
+
+  const deployed = await submitOperation(
+    Operation.createCustomContract({
+      address: new Address(input.landlord),
+      wasmHash,
+      constructorArgs,
+      salt,
+    }) as StellarOperation,
+    input.landlord,
+  );
+
+  const contractId = scValToNative(deployed.returnValue as xdr.ScVal);
+  if (typeof contractId !== "string") {
+    throw new Error("No pudimos identificar el acuerdo creado.");
+  }
+  return contractId;
+}
+
+export function xlmToStroops(value: string): bigint {
+  const clean = value.trim().replace(",", ".");
+  if (!/^\d+(\.\d{0,7})?$/.test(clean)) {
+    throw new Error("Escribí un monto válido, con hasta 7 decimales.");
+  }
+  const [whole, fraction = ""] = clean.split(".");
+  return (
+    BigInt(whole) * 10_000_000n +
+    BigInt((fraction + "0000000").slice(0, 7))
+  );
+}
+
+export function endOfDayUnix(date: string): bigint {
+  const [year, month, day] = date.split("-").map(Number);
+  if (!year || !month || !day) {
+    throw new Error("Elegí una fecha de fin válida.");
+  }
+  return BigInt(
+    Math.floor(new Date(year, month - 1, day, 23, 59, 59).getTime() / 1000),
+  );
 }
 
 export function bytesFromHex(hex: string): Uint8Array {
@@ -246,6 +378,13 @@ export function humanizeError(error: unknown): string {
   }
   if (/Failed to fetch|NetworkError|ECONNREFUSED/i.test(message)) {
     return "No se pudo conectar con el servicio. Revisá tu conexión.";
+  }
+  if (
+    /^(La cuenta|El inquilino|El monto|La fecha|No se pudo cargar|No pudimos|Escribí|Elegí)/.test(
+      message,
+    )
+  ) {
+    return message;
   }
   return "No se pudo completar la operación. Revisá tu cuenta e intentá de nuevo.";
 }

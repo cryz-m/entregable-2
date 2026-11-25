@@ -11,6 +11,8 @@ import {
 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
+  WatchWalletChanges,
+  disconnect as varialDisconnect,
   getAddress,
   getNetworkDetails,
   isAllowed,
@@ -33,16 +35,20 @@ import { VarialHelp } from "./components/VarialHelp";
 import { WalletButton } from "./components/WalletButton";
 import {
   DEFAULT_CONTRACT_ID,
+  MEDIATOR_ADDRESS,
   NATIVE_TOKEN_ID,
   NETWORK_PASSPHRASE,
   bytesFromHex,
   bytesValue,
+  deployAgreement,
+  endOfDayUnix,
   formatAmount,
   humanizeError,
   i128Value,
   invokeContract,
   readAgreement,
   readArbiter,
+  xlmToStroops,
 } from "./lib/stellar";
 import type { Agreement } from "./lib/stellar";
 import {
@@ -64,6 +70,16 @@ function getInitialView(): View {
   return new URLSearchParams(window.location.search).get("view") === "cuenta"
     ? "account"
     : "home";
+}
+
+const SESSION_KEY = "deposito-seguro:session";
+
+function hasActiveSession(): boolean {
+  try {
+    return sessionStorage.getItem(SESSION_KEY) === "1";
+  } catch {
+    return false;
+  }
 }
 
 function roleFor(
@@ -147,6 +163,7 @@ export default function App() {
   const [savedIds, setSavedIds] = useState<string[]>([]);
   const [summaries, setSummaries] = useState<SavedSummary[]>([]);
   const [savedLoading, setSavedLoading] = useState(false);
+  const [creating, setCreating] = useState(false);
   const [wallet, setWallet] = useState<string | null>(null);
   const [walletConnecting, setWalletConnecting] = useState(false);
   const [walletNetwork, setWalletNetwork] = useState<string | null>(null);
@@ -155,6 +172,7 @@ export default function App() {
   const [helpOpen, setHelpOpen] = useState(false);
   const [now, setNow] = useState(() => Math.floor(Date.now() / 1000));
   const toastTimer = useRef<number | null>(null);
+  const sessionEnded = useRef(false);
 
   const showToast = useCallback((next: Omit<ToastState, "id">) => {
     if (toastTimer.current) window.clearTimeout(toastTimer.current);
@@ -251,12 +269,61 @@ export default function App() {
   }, [refreshSaved]);
 
   useEffect(() => {
+    if (!wallet || !agreement) return;
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("invite") !== "1") return;
+    if (roleFor(wallet, agreement, arbiter) === "viewer") return;
+
+    if (!savedIds.includes(contractId)) {
+      const next = saveAgreement(wallet, contractId);
+      setSavedIds(next);
+      void refreshSaved(false);
+      showToast({
+        type: "success",
+        message: "Acuerdo agregado a tu cuenta desde la invitación.",
+      });
+    }
+
+    params.delete("invite");
+    const url = new URL(window.location.href);
+    url.search = params.toString();
+    window.history.replaceState({}, "", url);
+  }, [
+    wallet,
+    agreement,
+    arbiter,
+    savedIds,
+    contractId,
+    refreshSaved,
+    showToast,
+  ]);
+
+  useEffect(() => {
     const interval = window.setInterval(
       () => setNow(Math.floor(Date.now() / 1000)),
       1_000,
     );
     return () => window.clearInterval(interval);
   }, []);
+
+  useEffect(() => {
+    if (!wallet) return;
+    const watcher = new WatchWalletChanges(1_500);
+    const subscription = watcher.watch(({ address, networkPassphrase, error }) => {
+      if (sessionEnded.current || error || !address) return;
+      if (address.toUpperCase() === wallet.toUpperCase()) return;
+      setWallet(address);
+      setWalletNetwork(networkPassphrase || null);
+      showToast({
+        type: "info",
+        message: `Ahora estás con la cuenta •••• ${address.slice(-4)}.`,
+      });
+    });
+    if (subscription.error) {
+      watcher.stop();
+    }
+    return () => watcher.stop();
+  }, [wallet, showToast]);
 
   useEffect(() => {
     const onStorage = (event: StorageEvent) => {
@@ -278,6 +345,7 @@ export default function App() {
   }, []);
 
   useEffect(() => {
+    if (!hasActiveSession()) return;
     let active = true;
     async function restoreWallet() {
       try {
@@ -339,7 +407,13 @@ export default function App() {
       );
       if (access.error) throw new Error(access.error.message);
       if (!access.address) throw new Error("Varial no devolvió una cuenta.");
+      sessionEnded.current = false;
       setWallet(access.address);
+      try {
+        sessionStorage.setItem(SESSION_KEY, "1");
+      } catch {
+        // La sesión funciona igual dentro de esta pestaña.
+      }
       setHelpOpen(false);
       try {
         const network = await getNetworkDetails();
@@ -375,10 +449,38 @@ export default function App() {
   }
 
   function disconnectWallet() {
+    sessionEnded.current = true;
+    try {
+      sessionStorage.removeItem(SESSION_KEY);
+    } catch {
+      // Sin sessionStorage, igual limpiamos el estado en memoria.
+    }
+    try {
+      void varialDisconnect().catch(() => {
+        // Si la extensión no responde, la sesión local ya quedó cerrada.
+      });
+    } catch {
+      // La extensión no está disponible; la sesión local ya quedó cerrada.
+    }
     setWallet(null);
     setWalletNetwork(null);
-    goHome();
-    showToast({ type: "info", message: "Cerraste sesión." });
+    setView("home");
+    setContractId(DEFAULT_CONTRACT_ID);
+    try {
+      const url = new URL(window.location.href);
+      url.searchParams.delete("view");
+      url.searchParams.delete("contract");
+      url.searchParams.delete("invite");
+      window.history.replaceState({}, "", url);
+    } catch {
+      // La app funciona igual si history no está disponible.
+    }
+    window.scrollTo({ top: 0, behavior: "smooth" });
+    showToast({
+      type: "info",
+      message:
+        "Sesión cerrada. Para usar otra cuenta, cambiala en Varial y volvé a ingresar.",
+    });
   }
 
   function copyValue(value: string, label: string) {
@@ -514,6 +616,56 @@ export default function App() {
     } catch (error) {
       return { ok: false, error: humanizeError(error) };
     }
+  }
+
+  async function createAgreement(input: {
+    tenant: string;
+    amount: string;
+    leaseEnd: string;
+  }): Promise<{ ok: boolean; error?: string; contractId?: string }> {
+    if (!wallet) {
+      return { ok: false, error: "Ingresá con tu cuenta para crear acuerdos." };
+    }
+    setCreating(true);
+    try {
+      const id = await deployAgreement({
+        landlord: wallet,
+        tenant: input.tenant.trim().toUpperCase(),
+        amount: xlmToStroops(input.amount),
+        leaseEnd: endOfDayUnix(input.leaseEnd),
+      });
+      const next = saveAgreement(wallet, id);
+      setSavedIds(next);
+      await refreshSaved(false);
+      showToast({
+        type: "success",
+        message: "Acuerdo creado y guardado en tu cuenta.",
+      });
+      return { ok: true, contractId: id };
+    } catch (error) {
+      console.error(error);
+      return { ok: false, error: humanizeError(error) };
+    } finally {
+      setCreating(false);
+    }
+  }
+
+  function shareAgreement(id: string) {
+    const url = `${window.location.origin}${window.location.pathname}?contract=${id}&invite=1`;
+    void navigator.clipboard
+      .writeText(url)
+      .then(() =>
+        showToast({
+          type: "success",
+          message: "Enlace de invitación copiado.",
+        }),
+      )
+      .catch(() =>
+        showToast({
+          type: "error",
+          message: "No se pudo copiar el enlace.",
+        }),
+      );
   }
 
   async function runAction(
@@ -672,12 +824,17 @@ export default function App() {
       {view === "account" ? (
         <AccountView
           wallet={wallet}
+          mediator={MEDIATOR_ADDRESS}
           summaries={summaries}
           loading={savedLoading}
+          creating={creating}
           onOpen={goToAgreement}
           onRemove={removeSavedAgreement}
+          onShare={shareAgreement}
           onAdd={addSavedAgreement}
+          onCreate={createAgreement}
           onConnect={connectWallet}
+          onSwitchAccount={disconnectWallet}
           onHelp={() => setHelpOpen(true)}
           onBack={goHome}
         />

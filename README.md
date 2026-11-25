@@ -278,6 +278,11 @@ La interfaz se puede leer sin cuenta. Para actuar, el botón **Ingresar** detect
 si Varial está instalado y, si no, muestra una guía con el enlace de descarga.
 No hay que saber nada del ecosistema para usarla.
 
+La sesión se recuerda solo en la pestaña actual. Cerrar sesión borra esa marca y
+desconecta la app de Varial, así que recargar o borrar caché no vuelve a entrar
+solo. Para cambiar de cuenta: **Mi cuenta → Cambiar de cuenta**, cambiá la
+cuenta en Varial y volvé a ingresar.
+
 Qué puede hacer cada parte:
 
 | Rol | Acciones en la app |
@@ -292,6 +297,23 @@ La app detecta el rol comparando la cuenta conectada con `tenant`, `landlord` y
 contrato se puede cambiar con `VITE_CONTRACT_ID` en `web/.env` o con
 `?contract=C...`.
 
+### Crear un acuerdo para otra persona
+
+1. La otra persona instala Varial y copia su identificador de cuenta (empieza
+   con `G`).
+2. En **Mis acuerdos → Crear acuerdo**, el arrendador ingresa esa cuenta, el
+   monto y la fecha de fin del alquiler.
+3. La app crea un contrato nuevo, lo guarda en la cuenta del arrendador y
+   muestra un enlace de invitación.
+4. El arrendador comparte el enlace por copiar/pegar o WhatsApp.
+5. El inquilino abre el enlace, ingresa con Varial y el acuerdo se guarda
+   automáticamente en su cuenta. **No tiene que pegar nada.**
+
+El mediador neutral se configura con `VITE_MEDIATOR_ADDRESS` y el token con
+`VITE_TOKEN_ID`. El Wasm que se despliega desde la app está en
+`web/public/deposito_seguro.wasm`; si cambiás el contrato, volvé a copiarlo
+después de `stellar contract build`.
+
 ### Varios acuerdos y varios clientes
 
 La página principal queda como ejemplo. Después de ingresar, **Mis acuerdos**
@@ -300,8 +322,10 @@ abre un panel con los acuerdos guardados para esa cuenta:
 - Una misma cuenta puede ser **inquilino en un acuerdo y arrendador en otro**.
 - En un mismo acuerdo no puede ser inquilino y arrendador: el constructor exige
   que las tres partes sean distintas (`InvalidParties`, error #3).
-- Cada acuerdo se comparte con un enlace (`?contract=C...`). La otra parte lo
-  abre, ingresa con su cuenta y lo guarda en **Mis acuerdos**.
+- Cada acuerdo se comparte con un enlace (`?contract=C...&invite=1`). La otra
+  parte lo abre e ingresa con su cuenta; el acuerdo se guarda automáticamente.
+  Pegar el enlace a mano queda solo como respaldo para recuperarlo en otro
+  navegador.
 - Para clientes distintos podés usar cuentas de Varial distintas. Cada cuenta
   tiene su propia lista de acuerdos.
 - En este prototipo la lista se guarda en `localStorage` del navegador. Para

@@ -66,14 +66,41 @@ un query param (`?contract=C...`) o creando un `.env` a partir de
 
 | Variable | Qué es |
 |---|---|
-| `VITE_CONTRACT_ID` | Dirección `C…` del contrato. |
+| `VITE_CONTRACT_ID` | Dirección `C…` del contrato demo. |
 | `VITE_RPC_URL` | RPC de Soroban. Por defecto, testnet. |
 | `VITE_NETWORK_PASSPHRASE` | Passphrase de la red. |
 | `VITE_READ_SOURCE` | Cuenta pública usada para simular lecturas sin wallet. |
+| `VITE_MEDIATOR_ADDRESS` | Cuenta neutral que se asigna a los acuerdos creados desde la app. |
+| `VITE_TOKEN_ID` | Token del depósito. Por defecto, XLM nativo. |
 
 La app se puede leer sin cuenta. Para actuar, el botón **Ingresar** detecta si
 Varial está instalado y, si no, abre una guía con los pasos de descarga. También
 hay un enlace directo en el hero, en las acciones y en las preguntas frecuentes.
+
+## Crear un acuerdo para otra persona
+
+1. La otra persona instala Varial y copia su identificador de cuenta.
+2. En **Mis acuerdos → Crear acuerdo**, el arrendador ingresa la cuenta del
+   inquilino, el monto y la fecha de fin.
+3. La app despliega un contrato nuevo y lo guarda en la cuenta del arrendador.
+4. La app muestra un enlace de invitación para copiar o enviar por WhatsApp.
+5. El inquilino abre el enlace e ingresa con Varial. El acuerdo se guarda solo:
+   no hay que pegar el enlace.
+
+La creación usa el Wasm de `public/deposito_seguro.wasm` y el mediador
+configurado en `VITE_MEDIATOR_ADDRESS`. El alta manual por enlace queda como
+camino alternativo para recuperar un acuerdo en otro navegador.
+
+### Sesión y cambio de cuenta
+
+La sesión se recuerda solo dentro de la pestaña (`sessionStorage`). Al recargar
+la misma pestaña se restaura; al cerrar sesión se borra esa marca y se pide a
+Varial que desconecte la app. Después de cerrar sesión, recargar o borrar caché
+no debería volver a entrar solo.
+
+Para usar otra cuenta: **Mi cuenta → Cambiar de cuenta**, cambiá la cuenta
+activa en Varial y volvé a tocar **Ingresar**. Si cambiás de cuenta en Varial
+con la app abierta, la app intenta detectarlo y actualiza el panel.
 
 Requisitos para firmar:
 

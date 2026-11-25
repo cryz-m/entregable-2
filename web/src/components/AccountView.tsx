@@ -6,6 +6,7 @@ import {
   Loader2,
   Plus,
   Scale,
+  Share2,
   ShieldCheck,
   Trash2,
   UserRound,
@@ -16,6 +17,7 @@ import type { FormEvent } from "react";
 import type { Agreement } from "../lib/stellar";
 import { NATIVE_TOKEN_ID, formatAmount, formatDate } from "../lib/stellar";
 import type { Role } from "./ActionPanel";
+import { CreateAgreementModal } from "./CreateAgreementModal";
 import { StatusPill } from "./StatusPill";
 
 export interface SavedSummary {
@@ -28,12 +30,21 @@ export interface SavedSummary {
 
 interface AccountViewProps {
   wallet: string | null;
+  mediator: string;
   summaries: SavedSummary[];
   loading: boolean;
+  creating: boolean;
   onOpen: (contractId: string) => void;
   onRemove: (contractId: string) => void;
+  onShare: (contractId: string) => void;
   onAdd: (input: string) => Promise<{ ok: boolean; error?: string }>;
+  onCreate: (input: {
+    tenant: string;
+    amount: string;
+    leaseEnd: string;
+  }) => Promise<{ ok: boolean; error?: string; contractId?: string }>;
   onConnect: () => void;
+  onSwitchAccount: () => void;
   onHelp: () => void;
   onBack: () => void;
 }
@@ -86,10 +97,12 @@ function AgreementCard({
   summary,
   onOpen,
   onRemove,
+  onShare,
 }: {
   summary: SavedSummary;
   onOpen: (contractId: string) => void;
   onRemove: (contractId: string) => void;
+  onShare: (contractId: string) => void;
 }) {
   const Icon = roleMeta(summary.role).icon;
 
@@ -127,6 +140,15 @@ function AgreementCard({
         </span>
         <div className="account-card__tools">
           <StatusPill status={agreement.status} />
+          <button
+            type="button"
+            className="icon-button"
+            onClick={() => onShare(summary.contractId)}
+            aria-label="Copiar enlace de invitación"
+            title="Compartir acuerdo"
+          >
+            <Share2 size={14} />
+          </button>
           <button
             type="button"
             className="icon-button"
@@ -174,18 +196,24 @@ function AgreementCard({
 
 export function AccountView({
   wallet,
+  mediator,
   summaries,
   loading,
+  creating,
   onOpen,
   onRemove,
+  onShare,
   onAdd,
+  onCreate,
   onConnect,
+  onSwitchAccount,
   onHelp,
   onBack,
 }: AccountViewProps) {
   const [input, setInput] = useState("");
   const [adding, setAdding] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [createOpen, setCreateOpen] = useState(false);
 
   async function submit(event: FormEvent) {
     event.preventDefault();
@@ -274,6 +302,9 @@ export function AccountView({
           <span>Cuenta conectada</span>
           <strong>•••• {wallet.slice(-4)}</strong>
           <small>Los acuerdos se guardan en este navegador.</small>
+          <button type="button" className="help-cta" onClick={onSwitchAccount}>
+            Cambiar de cuenta
+          </button>
         </div>
       </header>
 
@@ -292,41 +323,66 @@ export function AccountView({
         </div>
       </div>
 
-      <form className="add-agreement" onSubmit={submit}>
-        <div className="add-agreement__copy">
-          <p className="panel__kicker">Sumar un acuerdo</p>
-          <h2>Pegá el enlace que te compartieron</h2>
+      <div className="account-cta">
+        <div>
+          <p className="panel__kicker">Nuevo alquiler</p>
+          <h2>Creá el acuerdo y compartí el enlace.</h2>
           <p>
-            Solo se agrega si tu cuenta participa como inquilino, arrendador o
-            mediador. Pegá el enlace completo que te compartió la otra parte.
+            Tu cuenta queda como arrendador. El inquilino abre el enlace, ingresa
+            con Varial y el acuerdo aparece en su cuenta.
           </p>
         </div>
-        <div className="add-agreement__form">
-          <label htmlFor="agreement-link">Enlace del acuerdo</label>
-          <div className="add-agreement__row">
-            <input
-              id="agreement-link"
-              value={input}
-              onChange={(event) => setInput(event.target.value)}
-              placeholder="Pegá el enlace completo"
-              spellCheck={false}
-            />
-            <button
-              type="submit"
-              className="button button--primary"
-              disabled={adding || !input.trim()}
-            >
-              {adding ? <Loader2 size={15} className="spin" /> : <Plus size={15} />}
-              {adding ? "Agregando…" : "Agregar"}
-            </button>
-          </div>
-          {error && (
-            <p className="form-error" role="alert">
-              {error}
+        <button
+          type="button"
+          className="button button--primary"
+          onClick={() => setCreateOpen(true)}
+        >
+          <Plus size={15} />
+          Crear acuerdo
+        </button>
+      </div>
+
+      <details className="add-existing">
+        <summary>
+          <span>Ya me compartieron un acuerdo</span>
+          <Plus size={16} />
+        </summary>
+        <form className="add-agreement" onSubmit={submit}>
+          <div className="add-agreement__copy">
+            <p className="panel__kicker">Sumar un acuerdo</p>
+            <h2>Pegá el enlace que te compartieron</h2>
+            <p>
+              Solo se agrega si tu cuenta participa como inquilino, arrendador o
+              mediador. Es el camino alternativo si el enlace no se guardó solo.
             </p>
-          )}
-        </div>
-      </form>
+          </div>
+          <div className="add-agreement__form">
+            <label htmlFor="agreement-link">Enlace del acuerdo</label>
+            <div className="add-agreement__row">
+              <input
+                id="agreement-link"
+                value={input}
+                onChange={(event) => setInput(event.target.value)}
+                placeholder="Pegá el enlace completo"
+                spellCheck={false}
+              />
+              <button
+                type="submit"
+                className="button button--primary"
+                disabled={adding || !input.trim()}
+              >
+                {adding ? <Loader2 size={15} className="spin" /> : <Plus size={15} />}
+                {adding ? "Agregando…" : "Agregar"}
+              </button>
+            </div>
+            {error && (
+              <p className="form-error" role="alert">
+                {error}
+              </p>
+            )}
+          </div>
+        </form>
+      </details>
 
       {loading ? (
         <div className="account-loading" role="status">
@@ -340,12 +396,22 @@ export function AccountView({
           </div>
           <h2>Todavía no hay acuerdos guardados</h2>
           <p>
-            Cuando la otra parte te comparta el enlace de un acuerdo, pegalo
-            arriba. También podés guardarlo desde la página del acuerdo.
+            Creá el primero y compartí el enlace con el inquilino. Si ya te
+            compartieron uno, abrilo y se guarda automáticamente.
           </p>
-          <button type="button" className="button button--outline" onClick={onBack}>
-            Ver el ejemplo
-          </button>
+          <div className="account-empty__actions">
+            <button
+              type="button"
+              className="button button--primary"
+              onClick={() => setCreateOpen(true)}
+            >
+              <Plus size={15} />
+              Crear acuerdo
+            </button>
+            <button type="button" className="button button--outline" onClick={onBack}>
+              Ver el ejemplo
+            </button>
+          </div>
         </div>
       ) : (
         <div className="account-groups">
@@ -365,6 +431,7 @@ export function AccountView({
                     summary={summary}
                     onOpen={onOpen}
                     onRemove={onRemove}
+                    onShare={onShare}
                   />
                 ))}
               </div>
@@ -387,6 +454,7 @@ export function AccountView({
                     summary={summary}
                     onOpen={onOpen}
                     onRemove={onRemove}
+                    onShare={onShare}
                   />
                 ))}
               </div>
@@ -400,6 +468,17 @@ export function AccountView({
             Podés usar cuentas separadas para clientes distintos.
           </p>
         </div>
+      )}
+
+      {createOpen && (
+        <CreateAgreementModal
+          wallet={wallet}
+          mediator={mediator}
+          creating={creating}
+          onCreate={onCreate}
+          onClose={() => setCreateOpen(false)}
+          onOpen={onOpen}
+        />
       )}
     </section>
   );
