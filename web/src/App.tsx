@@ -1,6 +1,7 @@
 import {
   AlertTriangle,
   ArrowDownRight,
+  ArrowLeft,
   Check,
   Download,
   Plus,
@@ -64,6 +65,11 @@ function getInitialContract(): string {
   const query = new URLSearchParams(window.location.search).get("contract");
   if (query && /^C[A-Z2-7]{55}$/i.test(query)) return query.toUpperCase();
   return DEFAULT_CONTRACT_ID;
+}
+
+function hasContractParam(): boolean {
+  const query = new URLSearchParams(window.location.search).get("contract");
+  return Boolean(query && /^C[A-Z2-7]{55}$/i.test(query));
 }
 
 function getInitialView(): View {
@@ -156,6 +162,7 @@ function ErrorPanel({
 export default function App() {
   const [contractId, setContractId] = useState(getInitialContract);
   const [view, setView] = useState<View>(getInitialView);
+  const [focused, setFocused] = useState(hasContractParam);
   const [agreement, setAgreement] = useState<Agreement | null>(null);
   const [arbiter, setArbiter] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -339,6 +346,7 @@ export default function App() {
     const onPopState = () => {
       setView(getInitialView());
       setContractId(getInitialContract());
+      setFocused(hasContractParam());
     };
     window.addEventListener("popstate", onPopState);
     return () => window.removeEventListener("popstate", onPopState);
@@ -427,6 +435,7 @@ export default function App() {
       });
 
       if (
+        !focused &&
         view === "home" &&
         contractId === DEFAULT_CONTRACT_ID &&
         getSavedAgreements(access.address).length > 0
@@ -465,6 +474,7 @@ export default function App() {
     setWallet(null);
     setWalletNetwork(null);
     setView("home");
+    setFocused(false);
     setContractId(DEFAULT_CONTRACT_ID);
     try {
       const url = new URL(window.location.href);
@@ -514,6 +524,7 @@ export default function App() {
 
   function goHome() {
     setView("home");
+    setFocused(false);
     setContractId(DEFAULT_CONTRACT_ID);
     writeUrl("home", DEFAULT_CONTRACT_ID);
     window.scrollTo({ top: 0, behavior: "smooth" });
@@ -528,6 +539,7 @@ export default function App() {
 
   function goToAgreement(nextContractId: string) {
     setView("home");
+    setFocused(true);
     setContractId(nextContractId);
     writeUrl("home", nextContractId);
     window.scrollTo({ top: 0, behavior: "smooth" });
@@ -841,6 +853,7 @@ export default function App() {
         />
       ) : (
         <>
+      {!focused && (
       <section className="hero shell">
         <div className="hero__copy">
           <p className="eyebrow">Contrato de arrendamiento · Costa Rica</p>
@@ -952,8 +965,37 @@ export default function App() {
           <div className="dossier-card__shadow" />
         </div>
       </section>
+      )}
 
-      <main className="shell workspace" id="acuerdo">
+      {focused && (
+        <section className="agreement-head shell">
+          <button
+            type="button"
+            className="back-link"
+            onClick={wallet ? goToAccount : goHome}
+          >
+            <ArrowLeft size={14} />
+            {wallet ? "Mis acuerdos" : "Volver al inicio"}
+          </button>
+          <div className="agreement-head__row">
+            <div>
+              <p className="eyebrow">Acuerdo de depósito</p>
+              <h1>{agreement ? `${amountLabel} en custodia` : "Tu acuerdo"}</h1>
+              <p className="agreement-head__meta">
+                {agreement
+                  ? `Fin del alquiler ${shortDate(agreement.lease_end)} · Reclamo desde ${shortDate(agreement.claim_deadline)}`
+                  : "Cargando el acuerdo…"}
+              </p>
+            </div>
+            {agreement && <StatusPill status={agreement.status} />}
+          </div>
+        </section>
+      )}
+
+      <main
+        className={`shell workspace${focused ? " workspace--focused" : ""}`}
+        id="acuerdo"
+      >
         <div className="workspace__main">
           {loading && !agreement ? (
             <SkeletonPanel />
@@ -1011,6 +1053,8 @@ export default function App() {
         </div>
       </main>
 
+      {!focused && (
+      <>
       <section className="how shell" id="como-funciona" aria-labelledby="how-title">
         <div className="section-heading">
           <p className="eyebrow">Cómo funciona</p>
@@ -1054,6 +1098,8 @@ export default function App() {
       </section>
 
       <Faq />
+      </>
+      )}
         </>
       )}
 

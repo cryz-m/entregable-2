@@ -780,6 +780,44 @@ code,
 
 /* ── Panels & workspace ─────────────────────────────────────────────────── */
 
+.agreement-head {
+  padding-block: 30px 26px;
+  border-bottom: 1px solid var(--line);
+}
+
+.agreement-head__row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 24px;
+  margin-top: 18px;
+}
+
+.agreement-head h1 {
+  max-width: 640px;
+  margin-top: 8px;
+  font-size: clamp(2rem, 3.6vw, 3.1rem);
+  line-height: 1;
+}
+
+.agreement-head__meta {
+  margin-top: 9px;
+  color: var(--ink-soft);
+  font-size: 0.8rem;
+}
+
+.agreement-head .status-pill {
+  flex: 0 0 auto;
+  margin-top: 4px;
+}
+
+@media (max-width: 620px) {
+  .agreement-head__row {
+    flex-direction: column;
+    gap: 12px;
+  }
+}
+
 .workspace {
   display: grid;
   grid-template-columns: minmax(0, 1.55fr) minmax(330px, 0.85fr);
@@ -2558,6 +2596,10 @@ code,
 
   .workspace {
     grid-template-columns: 1fr;
+  }
+
+  .workspace--focused .workspace__side {
+    order: -1;
   }
 
   .workspace__side {
