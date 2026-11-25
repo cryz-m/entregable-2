@@ -7,6 +7,7 @@ import {
   FileCheck2,
   Gavel,
   Loader2,
+  Plus,
   RefreshCw,
   Scale,
   ShieldCheck,
@@ -32,6 +33,8 @@ interface ActionPanelProps {
   role: Role;
   now: number;
   busy: string | null;
+  saved: boolean;
+  onSave: () => void;
   onFund: () => void;
   onClaim: () => void;
   onDispute: (hash: string) => void;
@@ -63,6 +66,8 @@ export function ActionPanel({
   role,
   now,
   busy,
+  saved,
+  onSave,
   onFund,
   onClaim,
   onDispute,
@@ -492,6 +497,21 @@ export function ActionPanel({
       ) : (
         <>
           {renderRoleHeader()}
+          {role !== "viewer" && (
+            <div className="save-agreement">
+              {saved ? (
+                <span className="save-agreement__done">
+                  <Check size={13} />
+                  Guardado en mi cuenta
+                </span>
+              ) : (
+                <button type="button" className="help-cta" onClick={onSave}>
+                  <Plus size={13} />
+                  Guardar en mi cuenta
+                </button>
+              )}
+            </div>
+          )}
           {status === "AwaitingFunds" && renderAwaitingFunds()}
           {status === "Active" && renderActive()}
           {status === "Disputed" && renderDisputed()}

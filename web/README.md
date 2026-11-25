@@ -18,6 +18,18 @@ Soroban RPC.
 La app detecta el rol comparando la cuenta conectada con las direcciones del
 contrato. Si la cuenta no es parte del acuerdo, queda en modo lectura.
 
+Después de ingresar, el botón **Mis acuerdos** abre un panel con los acuerdos
+guardados para esa cuenta. Una cuenta puede ser inquilino en un acuerdo y
+arrendador en otro; en un mismo acuerdo las partes deben ser cuentas distintas.
+Los acuerdos se guardan por cuenta en `localStorage`; para otro dispositivo hay
+que volver a pegar el enlace. El panel también se abre con `?view=cuenta`.
+
+![Panel Mis acuerdos](docs/account.webp)
+
+Para agregar un acuerdo, la otra parte comparte un enlace con
+`?contract=C...`; la app lee el acuerdo y solo lo guarda si la cuenta conectada
+participa como inquilino, arrendador o mediador.
+
 El acuerdo mutuo (`settle`) no está en la interfaz porque necesita las firmas
 del inquilino y del arrendador en la misma transacción. Se puede ejecutar desde
 la CLI o desde los tests. La app prioriza las acciones que puede firmar una sola

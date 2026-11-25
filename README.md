@@ -292,6 +292,24 @@ La app detecta el rol comparando la cuenta conectada con `tenant`, `landlord` y
 contrato se puede cambiar con `VITE_CONTRACT_ID` en `web/.env` o con
 `?contract=C...`.
 
+### Varios acuerdos y varios clientes
+
+La página principal queda como ejemplo. Después de ingresar, **Mis acuerdos**
+abre un panel con los acuerdos guardados para esa cuenta:
+
+- Una misma cuenta puede ser **inquilino en un acuerdo y arrendador en otro**.
+- En un mismo acuerdo no puede ser inquilino y arrendador: el constructor exige
+  que las tres partes sean distintas (`InvalidParties`, error #3).
+- Cada acuerdo se comparte con un enlace (`?contract=C...`). La otra parte lo
+  abre, ingresa con su cuenta y lo guarda en **Mis acuerdos**.
+- Para clientes distintos podés usar cuentas de Varial distintas. Cada cuenta
+  tiene su propia lista de acuerdos.
+- En este prototipo la lista se guarda en `localStorage` del navegador. Para
+  usarla desde otro dispositivo hay que volver a agregar el enlace. Una versión
+  de producción necesita un registro o indexador de acuerdos por cuenta.
+
+El panel se puede abrir directo con `?view=cuenta`.
+
 > El acuerdo mutuo (`settle`) no está en la interfaz porque requiere dos firmas
 > en la misma transacción. La app cubre las acciones de una sola cuenta; el
 > `settle` queda disponible en la CLI y en los tests.

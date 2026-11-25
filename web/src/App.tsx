@@ -3,9 +3,11 @@ import {
   ArrowDownRight,
   Check,
   Download,
+  Plus,
   RefreshCw,
   ShieldCheck,
   Sparkles,
+  UserRound,
 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
@@ -15,6 +17,8 @@ import {
   isConnected,
   requestAccess,
 } from "@stellar/varial-sdk";
+import { AccountView } from "./components/AccountView";
+import type { SavedSummary } from "./components/AccountView";
 import { ActionPanel } from "./components/ActionPanel";
 import type { Role } from "./components/ActionPanel";
 import { AgreementDetails } from "./components/AgreementDetails";
@@ -41,11 +45,38 @@ import {
   readArbiter,
 } from "./lib/stellar";
 import type { Agreement } from "./lib/stellar";
+import {
+  getSavedAgreements,
+  parseAgreementInput,
+  removeAgreement,
+  saveAgreement,
+} from "./lib/agreements";
+
+type View = "home" | "account";
 
 function getInitialContract(): string {
   const query = new URLSearchParams(window.location.search).get("contract");
   if (query && /^C[A-Z2-7]{55}$/i.test(query)) return query.toUpperCase();
   return DEFAULT_CONTRACT_ID;
+}
+
+function getInitialView(): View {
+  return new URLSearchParams(window.location.search).get("view") === "cuenta"
+    ? "account"
+    : "home";
+}
+
+function roleFor(
+  wallet: string | null,
+  agreement: Agreement | null,
+  arbiter: string | null,
+): Role {
+  if (!wallet || !agreement) return "viewer";
+  const account = wallet.toUpperCase();
+  if (account === agreement.tenant.toUpperCase()) return "tenant";
+  if (account === agreement.landlord.toUpperCase()) return "landlord";
+  if (account === arbiter?.toUpperCase()) return "arbiter";
+  return "viewer";
 }
 
 function shortDate(timestamp: bigint): string {
@@ -107,11 +138,15 @@ function ErrorPanel({
 }
 
 export default function App() {
-  const [contractId] = useState(getInitialContract);
+  const [contractId, setContractId] = useState(getInitialContract);
+  const [view, setView] = useState<View>(getInitialView);
   const [agreement, setAgreement] = useState<Agreement | null>(null);
   const [arbiter, setArbiter] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [savedIds, setSavedIds] = useState<string[]>([]);
+  const [summaries, setSummaries] = useState<SavedSummary[]>([]);
+  const [savedLoading, setSavedLoading] = useState(false);
   const [wallet, setWallet] = useState<string | null>(null);
   const [walletConnecting, setWalletConnecting] = useState(false);
   const [walletNetwork, setWalletNetwork] = useState<string | null>(null);
@@ -152,6 +187,54 @@ export default function App() {
     [contractId],
   );
 
+  const refreshSaved = useCallback(
+    async (showLoading = true) => {
+      if (!wallet) {
+        setSavedIds([]);
+        setSummaries([]);
+        setSavedLoading(false);
+        return;
+      }
+
+      const ids = getSavedAgreements(wallet);
+      setSavedIds(ids);
+      if (!ids.length) {
+        setSummaries([]);
+        setSavedLoading(false);
+        return;
+      }
+
+      if (showLoading) setSavedLoading(true);
+      const results = await Promise.all(
+        ids.map(async (id): Promise<SavedSummary> => {
+          try {
+            const [nextAgreement, nextArbiter] = await Promise.all([
+              readAgreement(id),
+              readArbiter(id),
+            ]);
+            return {
+              contractId: id,
+              agreement: nextAgreement,
+              arbiter: nextArbiter,
+              role: roleFor(wallet, nextAgreement, nextArbiter),
+            };
+          } catch (error) {
+            return {
+              contractId: id,
+              agreement: null,
+              arbiter: null,
+              role: "viewer",
+              error: humanizeError(error),
+            };
+          }
+        }),
+      );
+      setSummaries(results);
+      setSavedLoading(false);
+    },
+    [wallet],
+  );
+
   useEffect(() => {
     void load();
     const interval = window.setInterval(() => void load(true), 30_000);
@@ -164,11 +247,34 @@ export default function App() {
   }, [load]);
 
   useEffect(() => {
+    void refreshSaved();
+  }, [refreshSaved]);
+
+  useEffect(() => {
     const interval = window.setInterval(
       () => setNow(Math.floor(Date.now() / 1000)),
       1_000,
     );
     return () => window.clearInterval(interval);
+  }, []);
+
+  useEffect(() => {
+    const onStorage = (event: StorageEvent) => {
+      if (event.key?.startsWith("deposito-seguro:saved-agreements")) {
+        void refreshSaved(false);
+      }
+    };
+    window.addEventListener("storage", onStorage);
+    return () => window.removeEventListener("storage", onStorage);
+  }, [refreshSaved]);
+
+  useEffect(() => {
+    const onPopState = () => {
+      setView(getInitialView());
+      setContractId(getInitialContract());
+    };
+    window.addEventListener("popstate", onPopState);
+    return () => window.removeEventListener("popstate", onPopState);
   }, []);
 
   useEffect(() => {
@@ -245,6 +351,14 @@ export default function App() {
         type: "success",
         message: `Ingresaste con la cuenta •••• ${access.address.slice(-4)}.`,
       });
+
+      if (
+        view === "home" &&
+        contractId === DEFAULT_CONTRACT_ID &&
+        getSavedAgreements(access.address).length > 0
+      ) {
+        goToAccount();
+      }
     } catch (error) {
       const message =
         error instanceof Error && /Varial|Freighter/i.test(error.message)
@@ -263,6 +377,7 @@ export default function App() {
   function disconnectWallet() {
     setWallet(null);
     setWalletNetwork(null);
+    goHome();
     showToast({ type: "info", message: "Cerraste sesión." });
   }
 
@@ -273,6 +388,132 @@ export default function App() {
       .catch(() =>
         showToast({ type: "error", message: "No se pudo copiar al portapapeles." }),
       );
+  }
+
+  function writeUrl(nextView: View, nextContract = contractId) {
+    try {
+      const url = new URL(window.location.href);
+      if (nextView === "account") {
+        url.searchParams.set("view", "cuenta");
+        url.searchParams.delete("contract");
+      } else {
+        url.searchParams.delete("view");
+        if (nextContract !== DEFAULT_CONTRACT_ID) {
+          url.searchParams.set("contract", nextContract);
+        } else {
+          url.searchParams.delete("contract");
+        }
+      }
+      window.history.pushState({}, "", url);
+    } catch {
+      // La app funciona igual si el navegador bloquea history.
+    }
+  }
+
+  function goHome() {
+    setView("home");
+    setContractId(DEFAULT_CONTRACT_ID);
+    writeUrl("home", DEFAULT_CONTRACT_ID);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
+  function goToAccount() {
+    setView("account");
+    writeUrl("account");
+    void refreshSaved(false);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
+  function goToAgreement(nextContractId: string) {
+    setView("home");
+    setContractId(nextContractId);
+    writeUrl("home", nextContractId);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
+  function goHelp() {
+    if (view === "account") {
+      goHome();
+      window.setTimeout(() => {
+        document.getElementById("ayuda")?.scrollIntoView({
+          behavior: "smooth",
+          block: "start",
+        });
+      }, 80);
+      return;
+    }
+    document.getElementById("ayuda")?.scrollIntoView({
+      behavior: "smooth",
+      block: "start",
+    });
+  }
+
+  function saveCurrentAgreement() {
+    if (!wallet) {
+      setHelpOpen(true);
+      return;
+    }
+    if (!agreement || roleFor(wallet, agreement, arbiter) === "viewer") {
+      showToast({
+        type: "error",
+        message: "Esta cuenta no participa en el acuerdo.",
+      });
+      return;
+    }
+    const next = saveAgreement(wallet, contractId);
+    setSavedIds(next);
+    void refreshSaved(false);
+    showToast({
+      type: "success",
+      message: "Acuerdo guardado en tu cuenta.",
+    });
+  }
+
+  function removeSavedAgreement(id: string) {
+    if (!wallet) return;
+    const next = removeAgreement(wallet, id);
+    setSavedIds(next);
+    setSummaries((current) => current.filter((item) => item.contractId !== id));
+    void refreshSaved(false);
+    showToast({ type: "info", message: "Acuerdo quitado de tu cuenta." });
+  }
+
+  async function addSavedAgreement(
+    input: string,
+  ): Promise<{ ok: boolean; error?: string }> {
+    if (!wallet) {
+      return { ok: false, error: "Ingresá con tu cuenta para agregar acuerdos." };
+    }
+    const id = parseAgreementInput(input);
+    if (!id) {
+      return {
+        ok: false,
+        error: "No encontramos un acuerdo válido en ese enlace o código.",
+      };
+    }
+    if (savedIds.includes(id)) {
+      return { ok: false, error: "Ese acuerdo ya está en tu cuenta." };
+    }
+
+    try {
+      const [nextAgreement, nextArbiter] = await Promise.all([
+        readAgreement(id),
+        readArbiter(id),
+      ]);
+      if (roleFor(wallet, nextAgreement, nextArbiter) === "viewer") {
+        return {
+          ok: false,
+          error: "Tu cuenta no participa en ese acuerdo. Pedile el enlace a la otra parte.",
+        };
+      }
+      const next = saveAgreement(wallet, id);
+      setSavedIds(next);
+      await refreshSaved(false);
+      showToast({ type: "success", message: "Acuerdo agregado a tu cuenta." });
+      return { ok: true };
+    } catch (error) {
+      return { ok: false, error: humanizeError(error) };
+    }
   }
 
   async function runAction(
@@ -343,17 +584,8 @@ export default function App() {
     });
   }
 
-  const normalizedWallet = wallet?.toUpperCase() ?? null;
-  const role: Role =
-    normalizedWallet && agreement
-      ? normalizedWallet === agreement.tenant.toUpperCase()
-        ? "tenant"
-        : normalizedWallet === agreement.landlord.toUpperCase()
-          ? "landlord"
-          : normalizedWallet === arbiter?.toUpperCase()
-            ? "arbiter"
-            : "viewer"
-      : "viewer";
+  const role = roleFor(wallet, agreement, arbiter);
+  const isCurrentSaved = Boolean(wallet && savedIds.includes(contractId));
 
   const isNative = agreement?.token === NATIVE_TOKEN_ID;
   const amountLabel = agreement
@@ -366,7 +598,15 @@ export default function App() {
     <div className="app" id="top">
       <header className="site-header">
         <div className="shell header-inner">
-          <a className="brand" href="#top" aria-label="Depósito Seguro, inicio">
+          <a
+            className="brand"
+            href="#top"
+            aria-label="Depósito Seguro, inicio"
+            onClick={(event) => {
+              event.preventDefault();
+              goHome();
+            }}
+          >
             <span className="brand__mark" aria-hidden="true">
               <svg viewBox="0 0 32 32" fill="none">
                 <path
@@ -389,9 +629,26 @@ export default function App() {
           </a>
 
           <div className="header-tools">
-            <a className="header-link" href="#ayuda">
+            <button
+              type="button"
+              className="header-link header-link--help"
+              onClick={goHelp}
+            >
               Ayuda
-            </a>
+            </button>
+            {wallet && (
+              <button
+                type="button"
+                className={`header-link header-link--account${view === "account" ? " is-active" : ""}`}
+                onClick={goToAccount}
+              >
+                <UserRound size={14} strokeWidth={1.8} />
+                <span className="account-label">Mis acuerdos</span>
+                {savedIds.length > 0 && (
+                  <span className="count-badge">{savedIds.length}</span>
+                )}
+              </button>
+            )}
             <WalletButton
               address={wallet}
               connecting={walletConnecting}
@@ -412,6 +669,20 @@ export default function App() {
         </div>
       )}
 
+      {view === "account" ? (
+        <AccountView
+          wallet={wallet}
+          summaries={summaries}
+          loading={savedLoading}
+          onOpen={goToAgreement}
+          onRemove={removeSavedAgreement}
+          onAdd={addSavedAgreement}
+          onConnect={connectWallet}
+          onHelp={() => setHelpOpen(true)}
+          onBack={goHome}
+        />
+      ) : (
+        <>
       <section className="hero shell">
         <div className="hero__copy">
           <p className="eyebrow">Contrato de arrendamiento · Costa Rica</p>
@@ -445,6 +716,13 @@ export default function App() {
             <Download size={14} />
             ¿No tenés cuenta? Descargá Varial
           </button>
+          {wallet && savedIds.length > 0 && (
+            <button type="button" className="hero__help" onClick={goToAccount}>
+              <UserRound size={14} />
+              Tenés {savedIds.length} {savedIds.length === 1 ? "acuerdo" : "acuerdos"}{" "}
+              guardados · Ver mi cuenta
+            </button>
+          )}
 
           <dl className="hero__stats">
             <div>
@@ -550,6 +828,8 @@ export default function App() {
               role={role}
               now={now}
               busy={busy}
+              saved={isCurrentSaved}
+              onSave={saveCurrentAgreement}
               onFund={fund}
               onClaim={claim}
               onDispute={dispute}
@@ -616,6 +896,8 @@ export default function App() {
       </section>
 
       <Faq />
+        </>
+      )}
 
       <SiteFooter />
 
