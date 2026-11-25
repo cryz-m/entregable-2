@@ -255,7 +255,50 @@ tiempo con `env.ledger().set_timestamp(...)`, sin esperar.
 > En testnet, si Friendbot está saturado, reintentá con
 > `stellar keys fund tenant --network testnet`.
 
-## 7. Demo ya ejecutada en testnet
+## 7. Aplicación web
+
+La carpeta [`web/`](web/) tiene una app en React + TypeScript para operar el
+contrato sin usar la CLI. Corre contra Soroban RPC y firma con Varial; no tiene
+backend ni toca claves privadas.
+
+![Aplicación web de Depósito Seguro](web/docs/screenshot.webp)
+
+```bash
+cd web
+npm install
+npm run dev
+```
+
+Abrí <http://localhost:5173>. La app usa por defecto un contrato demo **vigente**
+en testnet:
+
+`CBOEEBM4MJQ425TV2JZNPCFH7S4YT7SEH3BUTBBEXFYA3HCGSBH4K6BP`
+
+La interfaz se puede leer sin cuenta. Para actuar, el botón **Ingresar** detecta
+si Varial está instalado y, si no, muestra una guía con el enlace de descarga.
+No hay que saber nada del ecosistema para usarla.
+
+Qué puede hacer cada parte:
+
+| Rol | Acciones en la app |
+|---|---|
+| Inquilino | Fondear el depósito y reclamarlo al cumplirse los 15 días. |
+| Arrendador | Abrir una disputa subiendo un archivo; el navegador calcula su SHA-256. |
+| Árbitro | Elegir el reparto con un slider y resolver la disputa. |
+| Visitante | Leer el acuerdo, la línea de tiempo y el estado sin ingresar. |
+
+La app detecta el rol comparando la cuenta conectada con `tenant`, `landlord` y
+`arbiter`. Si la cuenta no es parte del acuerdo, queda en modo lectura. El
+contrato se puede cambiar con `VITE_CONTRACT_ID` en `web/.env` o con
+`?contract=C...`.
+
+> El acuerdo mutuo (`settle`) no está en la interfaz porque requiere dos firmas
+> en la misma transacción. La app cubre las acciones de una sola cuenta; el
+> `settle` queda disponible en la CLI y en los tests.
+
+Más detalles en [`web/README.md`](web/README.md).
+
+## 8. Demo ya ejecutada en testnet
 
 Esta versión quedó desplegada y probada el **25 de noviembre de 2026** con XLM
 nativo. No es una maqueta: las transacciones están en el explorador.
@@ -282,7 +325,7 @@ Flujo ejecutado:
 5. El árbitro resolvió: 30 XLM al inquilino y 70 XLM al arrendador.
 6. El estado final quedó en `Closed`.
 
-## 8. Limitaciones y siguientes pasos
+## 9. Limitaciones y siguientes pasos
 
 - **El árbitro es un punto de confianza.** Si desaparece, una disputa puede
   quedar bloqueada. Una versión de producción podría agregar un plazo máximo
@@ -301,7 +344,7 @@ Flujo ejecutado:
 - **Producción.** Antes de usar dinero real: auditoría, pruebas de integración
   con la wallet, token estable, y un árbitro con reputación verificable.
 
-## 9. Fuentes
+## 10. Fuentes
 
 - CR Hoy, *Frente Amplio propone plan para garantizar devolución del depósito de
   alquiler en este plazo*, 12 de noviembre de 2025:

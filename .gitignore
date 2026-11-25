@@ -1,2 +1,9 @@
 target/
 test_snapshots/
+
+# Web app
+web/node_modules/
+web/dist/
+web/.env
+web/.env.local
+web/.vite/
