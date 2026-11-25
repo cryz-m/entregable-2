@@ -88,7 +88,7 @@ export function VarialHelp({
           <li>
             <span className="help-steps__number">3</span>
             <div>
-              <strong>Volvé a esta página</strong>
+              <strong>Volvé o recargá esta página</strong>
               <p>
                 Tocá “Ya lo instalé” y autorizá el acceso. Varial te va a pedir
                 confirmación cuando deposites o reclames.

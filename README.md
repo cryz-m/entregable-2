@@ -301,7 +301,9 @@ Más detalles en [`web/README.md`](web/README.md).
 ## 8. Demo ya ejecutada en testnet
 
 Esta versión quedó desplegada y probada el **25 de noviembre de 2026** con XLM
-nativo. No es una maqueta: las transacciones están en el explorador.
+nativo. No es una maqueta: las transacciones están en el explorador. El contrato
+que usa la app por defecto es otro, vigente y con 100 XLM:
+`CBOEEBM4MJQ425TV2JZNPCFH7S4YT7SEH3BUTBBEXFYA3HCGSBH4K6BP`.
 
 | Dato | Valor |
 |---|---|
